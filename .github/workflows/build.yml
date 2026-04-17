@@ -1,0 +1,79 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions: write-all
+    strategy:
+      matrix:
+        os: [linux, windows]
+        include:
+          - os: linux
+            runs_on: ubuntu-22.04
+            target1: i686-unknown-linux-gnu
+            target2: x86_64-unknown-linux-gnu
+            extra_deps: |
+              sudo apt update
+              sudo apt install gcc-i686-linux-gnu
+              sudo apt install gcc-multilib
+            binary_prefix: "lib"
+            file_ext: "so"
+            suffix32: _linux.dll
+            suffix64: _linux64.dll
+          - os: windows
+            runs_on: windows-2022
+            target1: i686-pc-windows-msvc
+            target2: x86_64-pc-windows-msvc
+            extra_deps: ""
+            binary_prefix: ""
+            file_ext: "dll"
+            suffix32: _win32.dll
+            suffix64: _win64.dll
+    runs-on: ${{ matrix.runs_on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: "0"
+
+      - name: Set up Rust
+        run: rustup toolchain install nightly --profile minimal
+
+      - name: Set Rust nightly as default
+        run: rustup override set nightly
+
+      - name: Install build dependencies
+        if: matrix.os == 'linux'
+        run: ${{ matrix.extra_deps }}
+
+      - name: Add targets
+        run: rustup target add ${{ matrix.target1 }} ${{ matrix.target2 }} --toolchain nightly
+
+      - name: Build targets
+        run: |
+          cargo +nightly build --release --target ${{ matrix.target1 }}
+          cargo +nightly build --release --target ${{ matrix.target2 }}
+
+      - name: Rename to gmsv_ and gmcl_
+        run: |
+          cp target/${{ matrix.target1 }}/release/${{ matrix.binary_prefix }}getregistry.${{ matrix.file_ext }} target/${{ matrix.target1 }}/release/gmcl_getregistry${{ matrix.suffix32 }}
+          cp target/${{ matrix.target2 }}/release/${{ matrix.binary_prefix }}getregistry.${{ matrix.file_ext }} target/${{ matrix.target2 }}/release/gmcl_getregistry${{ matrix.suffix64 }}
+          cp target/${{ matrix.target1 }}/release/${{ matrix.binary_prefix }}getregistry.${{ matrix.file_ext }} target/${{ matrix.target1 }}/release/gmsv_getregistry${{ matrix.suffix32 }}
+          cp target/${{ matrix.target2 }}/release/${{ matrix.binary_prefix }}getregistry.${{ matrix.file_ext }} target/${{ matrix.target2 }}/release/gmsv_getregistry${{ matrix.suffix64 }}
+
+      - name: Generate release tag
+        id: tag
+        run: echo "release_tag=v$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+        shell: bash
+
+      - name: Release Artifacts
+        uses: ncipollo/release-action@v1
+        with:
+          allowUpdates: true
+          tag: ${{ steps.tag.outputs.release_tag }}
+          artifacts: |
+            target/${{ matrix.target1 }}/release/gmcl_getregistry${{ matrix.suffix32 }}
+            target/${{ matrix.target2 }}/release/gmcl_getregistry${{ matrix.suffix64 }}
+            target/${{ matrix.target1 }}/release/gmsv_getregistry${{ matrix.suffix32 }}
+            target/${{ matrix.target2 }}/release/gmsv_getregistry${{ matrix.suffix64 }}

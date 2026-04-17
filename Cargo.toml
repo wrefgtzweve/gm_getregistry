@@ -1,0 +1,10 @@
+[package]
+name = "getregistry"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gmod = { version = "17.0.0", default-features = false }
+
+[lib]
+crate-type = ["cdylib"]
